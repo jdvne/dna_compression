@@ -12,7 +12,7 @@ Content:
 from Bio import SeqIO
 from Bio.Seq import Seq
 
-key = {
+char_to_nib = {
     '?': 0b0000, 
     'A': 0b0001, 
     'T': 0b0010, 
@@ -50,10 +50,10 @@ def seq_to_dna(sequence: Seq, filename: str):
         pair = sequence[i:i+2]
 
         try:
-            value = key[common.index(pair)]
+            value = char_to_nib[common.index(pair)]
             i += 1
         except(ValueError):
-            value = key[sequence[i]]
+            value = char_to_nib[sequence[i]]
         
         if carry is not None:
             data.append((carry << 4) | value)
@@ -66,14 +66,14 @@ def seq_to_dna(sequence: Seq, filename: str):
     # handle last base, use ] as end sentinel
     if i == len(sequence) - 1:
         if carry is not None:
-            data.append((carry << 4) | key[sequence[i]])
-            data.append((key[']'] << 4))
+            data.append((carry << 4) | char_to_nib[sequence[i]])
+            data.append((char_to_nib[']'] << 4))
         else:
-            data.append((key[sequence[i]] << 4) | key[']'])
+            data.append((char_to_nib[sequence[i]] << 4) | char_to_nib[']'])
 
     else:
         if carry is not None:
-            data.append((carry << 4) | key[']'] << 4)
+            data.append((carry << 4) | char_to_nib[']'] << 4)
 
 
     with open(filename, 'wb') as f:
@@ -97,16 +97,20 @@ def dna_to_seq(filename: str):
     data = []
     with open(filename, 'rb') as f:
         # read mapping
-        ikey = {v: k for k, v in key.items()}
-        ikey.update({0b1000 + i: f.read(2).decode('utf-8') for i in range(8)})
+        nib_to_char = {v: k for k, v in char_to_nib.items()}
+        nib_to_char.update(
+            {0b1000 + i: f.read(2).decode('utf-8') for i in range(8)}
+        )
 
+        # decompress
         byte = f.read(1)
         while byte:
             byte = int.from_bytes(byte, 'big')
-            data.append(ikey[(byte >> 4) & 0b1111])
-            data.append(ikey[byte & 0b1111])
+            data.append(nib_to_char[(byte >> 4) & 0b1111])
+            data.append(nib_to_char[byte & 0b1111])
             byte = f.read(1)
 
+        # remove sentinel and possible blank
         if data[-1] != ']':
             data.pop()
         data.pop()
