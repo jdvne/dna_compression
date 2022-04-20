@@ -1,6 +1,4 @@
-# FASTA/FASTQ
-*.fasta
-*.fastq
-
-# OUR FILE FORMATS
-*.3b
+leon
+lfqc
+scalce
+slimfastq
