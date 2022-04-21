@@ -50,7 +50,7 @@ def fastq_to_dna(infile: str, outfile: str):
     # via https://stackoverflow.com/a/1657385
     with open(infile) as f:
         for seqid, bases, _, scores in zip_longest(*[f]*4):
-            seqids.append(seqid)
+            seqids.append(seqid[1:])
             seq = list(zip(bases[:-1], scores[:-1]))
             reads.append(seq)
             pairs.update(seq)
@@ -58,7 +58,8 @@ def fastq_to_dna(infile: str, outfile: str):
         print(f'uncompressed filesize:  {f.tell()} bytes')
 
     table = {pair[0]: 0b0101 + i for i, pair in enumerate(pairs.most_common(10)) if len(pair[0]) > 1}
-    # print(pairs.most_common(10))
+    print(sum(x for _, x in pairs.most_common(200)))
+    print(sum(x for _, x in pairs.most_common(150)))
 
     # parse reads
     data = []
@@ -78,7 +79,7 @@ def fastq_to_dna(infile: str, outfile: str):
                     carry = None
             else:
                 value = lookup[base]
-                score = ord(score[0])
+                score = ord(score)
                 if carry is None:
                     read_data.append((value << 4) | (score >> 4))
                     carry = score & 0b1111
@@ -117,40 +118,91 @@ def dna_to_fastq(infile: str, outfile: str):
         # decompress
         seqids = []
         reads = []
+        
+        while True:
+            seqid = f.readline()
+            if(len(seqid) == 0):
+                break
 
-        seqid = f.readline()
-        # FIXME: we do not have a set size we are writing for this read length
-        length = int.from_bytes(f.read(1), 'big')
-        read = []
-        carry = None
-        for _ in range(length):
-            if carry is None:
-                byte = int.from_bytes(f.read(1), 'big')
-                
-                if (byte >> 4) in table:
-                    read.append(tuple(table[byte >> 4]))
-                    carry = byte & 0b1111
+            seqids.append(seqid)
+
+            # FIXME: we do not have a set size we are writing for this read length
+            length = int.from_bytes(f.read(1), 'big')
+
+            bases = []
+            scores = []
+            carry = None
+            for _ in range(length):
+                if carry is None:
+                    byte = int.from_bytes(f.read(1), 'big')
+                    
+                    if (byte >> 4) in table:
+                        base, score = table[byte >> 4]
+                        carry = byte & 0b1111
+                    else:
+                        base = lookup[(byte >> 4)]
+                        nb = int.from_bytes(f.read(1), 'big')
+                        score = chr(((byte & 0b1111) << 4) | (nb >> 4))
+                        carry = nb & 0b1111
+
+                    bases.append(base)
+                    scores.append(score)
+                    
                 else:
-                    base = lookup[(byte >> 4)]
-                    nb = int.from_bytes(f.read(1), 'big')
+                    if carry in table:
+                        base, score = table[carry]
+                    else:
+                        base = lookup[carry]
+                        nb = int.from_bytes(f.read(1), 'big')
+                        score = chr(nb)
+                    
+                    bases.append(base)
+                    scores.append(score)
+                    carry = None
 
-                    value = chr((byte << 4) | (nb >> 4))
-                    read.append((base, value))
-                    carry = nb & 0b1111
-            else:
-                if carry in table:
-                    read.append(tuple(table[carry]))
-                else:
-                    base = lookup[carry]
-                    nb = int.from_bytes(f.read(1), 'big')
+            reads.append((bases, scores))
 
-                    read.append((base, chr(nb)))
-                
-                carry = None
+        with open(outfile, 'w') as f:
+            for read, seqid in zip(reads, seqids):
+                bases, scores = read
+                f.write(
+                    '@' + seqid.decode("utf-8") +
+                    ''.join(bases) + '\n' +
+                    '+\n' +
+                    ''.join(scores) + '\n'
+                )
 
-        for base, score in read:
-            # print(base, score)
-            pass
+def gzip_file(filename):
+    import gzip
+    import shutil
+    with open(filename, 'rb') as f_in:
+        with gzip.open(f'{filename}.gz', 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+
+def test_equality(filename1, filename2):
+    from hashlib import md5
+
+    # BUF_SIZE is totally arbitrary, change for your app!
+    BUF_SIZE = 65536  # lets read stuff in 64kb chunks!
+
+    md5f1 = md5()
+    md5f2 = md5()
+
+    with open(filename1, 'rb') as f1, open(filename2, 'rb') as f2:
+        while True:
+            data1 = f1.read(BUF_SIZE)
+            data2 = f2.read(BUF_SIZE)
+
+            if not data1 or not data2:
+                break
+
+            md5f1.update(data1)
+            md5f2.update(data2)
+
+    print(f'hashes match:           {md5f1.hexdigest() == md5f2.hexdigest()}')
 
 fastq_to_dna(sys.argv[1], sys.argv[2])
-dna_to_fastq(sys.argv[2], 'test.fastq')
+dna_to_fastq(sys.argv[2], 'out.fastq')
+test_equality(sys.argv[1], 'out.fastq')
+gzip_file(sys.argv[1])
+gzip_file(sys.argv[2])
