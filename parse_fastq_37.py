@@ -26,12 +26,12 @@ varint read length
 import sys
 
 lookup = {
-    '?':    0b000, 
+    'N':    0b000, 
     'A':    0b001, 
     'T':    0b010, 
     'G':    0b011, 
     'C':    0b100, 
-    0b000: '?', 
+    0b000: 'N', 
     0b001: 'A',
     0b010: 'T',
     0b011: 'G',

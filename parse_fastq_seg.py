@@ -26,13 +26,11 @@ varint read length
 import sys
 
 lookup = {
-    # '?':    0b0000, 
     'N':    0b0000, 
     'A':    0b0001, 
     'T':    0b0010, 
     'G':    0b0011, 
     'C':    0b0100, 
-    # 0b0000: '?', 
     0b0000: 'N', 
     0b0001: 'A',
     0b0010: 'T',
@@ -78,8 +76,6 @@ def fastq_to_dna(infile: str, outfile: str):
                     read_data.append((carry << 4) | value)
                     carry = None
             else:
-                if base == '?':
-                    print(reads.index(read))
                 value = lookup[base]
                 score = ord(score)
                 if carry is None:
@@ -105,11 +101,16 @@ def fastq_to_dna(infile: str, outfile: str):
             f.write(bytes('**', 'utf-8'))
 
         # write reads
-        for seqid, read in zip(seqids, data):
-            f.write(bytes(seqid, 'utf-8'))
+        for read in data:
             f.write(bytes(read))
 
         print(f'compressed filesize:    {f.tell()} bytes')
+
+    with open(f'{outfile}.txt', 'w') as f:
+        for seqid in seqids:
+            f.write(seqid)
+
+        gzip_file(f'{outfile}.txt')
 
 
 def dna_to_fastq(infile: str, outfile: str):
@@ -181,6 +182,8 @@ def gzip_file(filename):
         with gzip.open(f'{filename}.gz', 'wb') as f_out:
             shutil.copyfileobj(f_in, f_out)
 
+            print(f'gzipped filesize:       {f_out.tell()} bytes')
+
 def test_equality(filename1, filename2):
     from hashlib import md5
 
@@ -204,7 +207,7 @@ def test_equality(filename1, filename2):
     print(f'hashes match:           {md5f1.hexdigest() == md5f2.hexdigest()}')
 
 fastq_to_dna(sys.argv[1], sys.argv[2])
-dna_to_fastq(sys.argv[2], 'out.fastq')
-test_equality(sys.argv[1], 'out.fastq')
+# dna_to_fastq(sys.argv[2], 'out.fastq')
+# test_equality(sys.argv[1], 'out.fastq')
 # gzip_file(sys.argv[1])
 # gzip_file(sys.argv[2])
